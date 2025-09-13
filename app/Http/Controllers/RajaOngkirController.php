@@ -10,7 +10,8 @@ use Exception;
 class RajaOngkirController extends Controller
 {
     // private $rajaongkirKey = 'WbiyE5Aia8714f6125537b6aNaefsF3n';
-    private $rajaongkirKey = 'o2inZIGlfc9fb029d1585a4fOXs73TLp';
+    // private $rajaongkirKey = 'o2inZIGlfc9fb029d1585a4fOXs73TLp';
+    private $rajaongkirKey = 'GKk9UMuwd192c74c62d701c9VKW95f48';
     private $rajaongkirBaseUrl = 'https://rajaongkir.komerce.id/api/v1';
 
     /**
