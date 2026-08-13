@@ -15,7 +15,8 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         // 1. Mulai query dengan eager loading untuk efisiensi (menghindari N+1 problem)
-        $query = Product::with('categories')->where('is_active', true);
+        // $query = Product::with('categories')->where('is_active', true);
+        $query = Product::with(['categories', 'images'])->where('is_active', true);
 
         // 2. Algoritma Filter berdasarkan slug kategori
         if ($request->filled('category')) {

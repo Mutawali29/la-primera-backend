@@ -1,23 +1,26 @@
 <?php
-// App\Http\Controllers\Api\AuthController.php 
+// App\Http\Controllers\Api\AuthController.php
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\OtpMail;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Str;
-use App\Http\Resources\UserResource; // <-- Tambahkan ini
+use App\Http\Resources\UserResource;
 
 class AuthController extends Controller
 {
     /**
      * Register a new user.
+     * User TIDAK langsung dapat token di sini — harus verifikasi OTP dulu.
      *
      * @param Request $request
      * @return JsonResponse
@@ -41,27 +44,32 @@ class AuthController extends Controller
         }
 
         try {
-            // 2. Buat User Baru
+            // 2. Generate kode OTP 6 digit
+            $otpCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            // 3. Buat User Baru (belum terverifikasi)
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'phone' => $request->phone,
-                'role' => 'user', // Default role
+                'role' => 'user',
                 'is_active' => true,
+                'otp_code' => $otpCode,
+                'otp_expires_at' => now()->addMinutes(10),
+                'otp_last_sent_at' => now(),
             ]);
 
-            // 3. Buat Token Sanctum
-            $token = $user->createToken('auth_token')->plainTextToken;
+            // 4. Kirim email berisi kode OTP
+            Mail::to($user->email)->send(new OtpMail($otpCode, $user->name));
 
-            // 4. Kirim Response
+            // 5. Kirim Response — TANPA token, user harus verifikasi OTP dulu
             return response()->json([
                 'success' => true,
-                'message' => 'Registration successful',
+                'message' => 'Registration successful, please verify your email',
                 'data' => [
-                    'user' => new UserResource($user), // <-- Gunakan UserResource untuk format user
-                    'access_token' => $token,
-                    'token_type' => 'Bearer',
+                    'email' => $user->email,
+                    'requires_otp' => true,
                 ]
             ], 201);
 
@@ -69,6 +77,156 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Registration failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify the OTP code sent to the user's email.
+     * Jika valid, akan mengeluarkan token Sanctum (auto-login).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'otp_code' => 'required|string|size:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation errors',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        if ($user->email_verified_at) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email already verified'
+            ], 400);
+        }
+
+        if (!$user->otp_expires_at || now()->greaterThan($user->otp_expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP code has expired, please request a new one'
+            ], 400);
+        }
+
+        if ($user->otp_code !== $request->otp_code) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP code'
+            ], 400);
+        }
+
+        try {
+            $user->update([
+                'email_verified_at' => now(),
+                'otp_code' => null,
+                'otp_expires_at' => null,
+            ]);
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email verified successfully',
+                'data' => [
+                    'user' => new UserResource($user),
+                    'access_token' => $token,
+                    'token_type' => 'Bearer',
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP verification failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Resend a new OTP code to the user's email.
+     * Dibatasi cooldown 60 detik di server untuk mencegah spam.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function resendOtp(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation errors',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        if ($user->email_verified_at) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email already verified'
+            ], 400);
+        }
+
+        // Cooldown 60 detik dicek di server — tidak bisa dibypass lewat request langsung ke API
+        if ($user->otp_last_sent_at && now()->diffInSeconds($user->otp_last_sent_at) < 60) {
+            $remaining = 60 - now()->diffInSeconds($user->otp_last_sent_at);
+            return response()->json([
+                'success' => false,
+                'message' => 'Please wait before requesting a new code',
+                'retry_after' => $remaining,
+            ], 429);
+        }
+
+        try {
+            $otpCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            $user->update([
+                'otp_code' => $otpCode,
+                'otp_expires_at' => now()->addMinutes(10),
+                'otp_last_sent_at' => now(),
+            ]);
+
+            Mail::to($user->email)->send(new OtpMail($otpCode, $user->name));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP code resent successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to resend OTP code',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -107,7 +265,7 @@ class AuthController extends Controller
 
             // 3. Dapatkan User dan Buat Token
             $user = User::where('email', $request->email)->firstOrFail();
-            
+
             // Check if user is active
             if (!$user->is_active) {
                 return response()->json([
@@ -129,7 +287,7 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Login successful',
                 'data' => [
-                    'user' => new UserResource($user), // <-- PENTING: Gunakan UserResource untuk menyertakan role
+                    'user' => new UserResource($user),
                     'access_token' => $token,
                     'token_type' => 'Bearer',
                 ]
@@ -176,10 +334,9 @@ class AuthController extends Controller
      */
     public function profile(Request $request): JsonResponse
     {
-        // Return user profile using UserResource
         return response()->json([
             'success' => true,
-            'data' => new UserResource($request->user()) // <-- Gunakan UserResource
+            'data' => new UserResource($request->user())
         ]);
     }
 
@@ -200,9 +357,8 @@ class AuthController extends Controller
                 'errors' => $validator->errors()
             ], 422);
         }
-        
+
         try {
-            // Menggunakan fitur bawaan Laravel untuk mengirim link reset
             $status = Password::sendResetLink($request->only('email'));
 
             if ($status === Password::RESET_LINK_SENT) {
@@ -211,7 +367,7 @@ class AuthController extends Controller
                     'message' => __($status)
                 ]);
             }
-            
+
             return response()->json([
                 'success' => false,
                 'message' => __($status)
