@@ -2,13 +2,14 @@
   "version": 2,
   "framework": null,
   "functions": {
-    "api/index.php": { "runtime": "vercel-php@0.9.0" }
+    "api/index.php": { "runtime": "vercel-php@0.9.0" },
+    "api/debug.php": { "runtime": "vercel-php@0.9.0" }
   },
   "routes": [
     { "src": "/build/(.*)", "dest": "/public/build/" },
+    { "src": "/api/debug", "dest": "/api/debug.php" },
     { "src": "/(.*)", "dest": "/api/index.php" }
   ],
-  
   "buildCommand": "echo 'no vite build needed'",
   "outputDirectory": "public"
 }
