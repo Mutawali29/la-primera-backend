@@ -1,5 +1,7 @@
 <?php
 
+error_reporting(E_ALL & ~E_DEPRECATED);
+
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 
@@ -21,7 +23,6 @@ $app = require_once __DIR__.'/../bootstrap/app.php';
 if (getenv('VERCEL') || isset($_SERVER['VERCEL'])) {
     $app->useStoragePath('/tmp/storage');
 
-    // pastikan struktur folder ada di setiap cold start
     $dirs = [
         '/tmp/storage/framework/cache',
         '/tmp/storage/framework/sessions',
