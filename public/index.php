@@ -22,12 +22,14 @@ $app = require_once __DIR__.'/../bootstrap/app.php';
 // --- Fix untuk Vercel serverless: hanya /tmp yang writable ---
 if (getenv('VERCEL') || isset($_SERVER['VERCEL'])) {
     $app->useStoragePath('/tmp/storage');
+    $app->useBootstrapPath('/tmp/bootstrap');
 
     $dirs = [
         '/tmp/storage/framework/cache',
         '/tmp/storage/framework/sessions',
         '/tmp/storage/framework/views',
         '/tmp/storage/logs',
+        '/tmp/bootstrap/cache',
     ];
     foreach ($dirs as $dir) {
         if (!is_dir($dir)) {
