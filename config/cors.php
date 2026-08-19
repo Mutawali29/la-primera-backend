@@ -1,5 +1,6 @@
 <?php
-// config/cors.php 
+// config/cors.php
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -14,15 +15,23 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie', 'login', 'register', 'admin/*'], // Tambahkan rute admin Anda
-    'allowed_methods' => ['*'], // Izinkan semua metode HTTP (GET, POST, PUT, PATCH, DELETE, OPTIONS)
-    'allowed_origins' => ['http://localhost:5173'], // Ganti dengan URL frontend React Anda
-    'allowed_origins_patterns' => [],
-    'allowed_headers' => ['*'], // Izinkan semua header request
+    'paths' => ['api/*', 'sanctum/csrf-cookie', 'login', 'register', 'admin/*'],
+
+    'allowed_methods' => ['*'],
+
+    'allowed_origins' => array_filter(explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:5173'))),
+
+    'allowed_origins_patterns' => [
+        '#^https://la-primera-roan\.vercel\.app$#',
+        '#^https://la-primera-.*-qusay-mutawalis-projects\.vercel\.app$#',
+    ],
+
+    'allowed_headers' => ['*'],
+
     'exposed_headers' => [],
-    'max_age' => 0,
-    'supports_credentials' => true, // Penting untuk Sanctum jika Anda mengirim cookie/token
 
+    'max_age' => 3600,
 
+    'supports_credentials' => true,
 
 ];

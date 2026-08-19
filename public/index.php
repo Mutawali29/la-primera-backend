@@ -17,4 +17,22 @@ require __DIR__.'/../vendor/autoload.php';
 /** @var Application $app */
 $app = require_once __DIR__.'/../bootstrap/app.php';
 
+// --- Fix untuk Vercel serverless: hanya /tmp yang writable ---
+if (getenv('VERCEL') || isset($_SERVER['VERCEL'])) {
+    $app->useStoragePath('/tmp/storage');
+
+    // pastikan struktur folder ada di setiap cold start
+    $dirs = [
+        '/tmp/storage/framework/cache',
+        '/tmp/storage/framework/sessions',
+        '/tmp/storage/framework/views',
+        '/tmp/storage/logs',
+    ];
+    foreach ($dirs as $dir) {
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+    }
+}
+
 $app->handleRequest(Request::capture());
