@@ -10,6 +10,7 @@
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.1",
         "laravel/tinker": "^2.10.1",
+        "league/flysystem-aws-s3-v3": "^3.35",
         "midtrans/midtrans-php": "*"
     },
     "require-dev": {
@@ -70,6 +71,10 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
+        },
+        "audit": {
+            "abandoned": "report",
+            "block-insecure": false
         }
     },
     "minimum-stability": "stable",
